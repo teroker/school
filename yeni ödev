@@ -1,0 +1,131 @@
+import csv
+import tkinter as tk
+from tkinter import messagebox, simpledialog
+import os
+import threading
+
+class StokYonetimSistemi:
+    def __init__(self, dosya_adi="stok_listesi.csv"):
+        self.dosya_adi = dosya_adi
+        self.tedarikci = {"ad": "ABC Gida", "mail": "siparis@abcgida.com"}
+        
+        self.urunler = self.verileri_yukle()
+        
+        self.root = tk.Tk()
+        self.root.title("Akıllı Stok Asistanı")
+        self.root.geometry("400x550")
+        self.arayuz_hazirla()
+
+    def verileri_yukle(self):
+        """Program acildiginda CSV dosyasindaki verileri okur."""
+        varsayilan = {"Cay": 15, "Su": 2, "Makarna": 20, "Ekmek": 3, "Sut": 12}
+        if os.path.exists(self.dosya_adi):
+            try:
+                with open(self.dosya_adi, mode='r', encoding='utf-8') as f:
+                    reader = csv.reader(f)
+                    next(reader)
+                    return {row[0]: int(row[1]) for row in reader if row}
+            except: return varsayilan
+        return varsayilan
+
+    def arayuz_hazirla(self):
+        # Başlık
+        tk.Label(self.root, text="🤖 STOK ASISTANI (CHAT)", font=("Arial", 14, "bold")).pack(pady=10)
+        
+        # Chat Mesaj Alanı
+        self.chat_alani = tk.Text(self.root, height=15, state="disabled", bg="#f8f9fa", font=("Arial", 10))
+        self.chat_alani.pack(padx=10, pady=5, fill="both", expand=True)
+
+        # Mesaj Giriş Alanı
+        self.giris_cerceve = tk.Frame(self.root)
+        self.giris_cerceve.pack(fill="x", padx=10, pady=10)
+        
+        self.mesaj_girisi = tk.Entry(self.giris_cerceve, font=("Arial", 11))
+        self.mesaj_girisi.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        self.mesaj_girisi.bind("<Return>", lambda e: self.mesaj_gonder()) # Enter tuşu desteği
+        
+        tk.Button(self.giris_cerceve, text="Gonder", command=self.mesaj_gonder, bg="#007bff", fg="white").pack(side="right")
+
+        # Hızlı İşlem Butonları
+        self.buton_cerceve = tk.Frame(self.root)
+        self.buton_cerceve.pack(pady=10)
+        
+        tk.Button(self.buton_cerceve, text="📋 Listele", command=self.stoklari_listele, width=12).grid(row=0, column=0, padx=5)
+        tk.Button(self.buton_cerceve, text="💾 Kaydet", command=self.kaydet_verileri, width=12, bg="#d4edda").grid(row=0, column=1, padx=5)
+
+        self.mesaj_yaz("Sistem", "Merhaba! Size nasil yardimci olabilirim? (Ornek: 'kritik urunler', 'cay kac tane', 'ekle')")
+
+    def mesaj_yaz(self, gonderen, mesaj):
+        self.chat_alani.config(state="normal")
+        self.chat_alani.insert("end", f"{gonderen}: {mesaj}\n")
+        self.chat_alani.config(state="disabled")
+        self.chat_alani.see("end")
+
+    def mesaj_gonder(self):
+        komut = self.mesaj_girisi.get().strip().lower()
+        if not komut:
+            return
+        
+        self.mesaj_yaz("Siz", komut)
+        self.mesaj_girisi.delete(0, tk.END)
+        self.chatbot_mantigi(komut)
+
+    def chatbot_mantigi(self, komut):
+        """Yazılı komutları analiz eder."""
+        # Kritik Stok Kontrolü
+        if "kritik" in komut or "azalan" in komut:
+            kritikler = [u for u, m in self.urunler.items() if m <= 5]
+            if kritikler:
+                self.mesaj_yaz("Asistan", f"Su urunler azaldi: {', '.join(kritikler)}")
+            else:
+                self.mesaj_yaz("Asistan", "Harika! Tum stoklar guvenli seviyede.")
+        
+        # Ürün Sorgulama (Örn: "cay kac tane")
+        elif "kac tane" in komut or "stok" in komut:
+            bulundu = False
+            for urun in self.urunler:
+                if urun.lower() in komut:
+                    self.mesaj_yaz("Asistan", f"Elimizde {self.urunler[urun]} adet {urun} var.")
+                    bulundu = True
+                    break
+            if not bulundu:
+                self.mesaj_yaz("Asistan", f"Sistemde toplam {len(self.urunler)} farkli urun tanimli.")
+
+        # Ürün Ekleme/Güncelleme
+        elif "ekle" in komut or "guncelle" in komut:
+            self.mesaj_yaz("Asistan", "Lutfen acilan pencereden urun bilgilerini girin.")
+            self.urun_ekle_popup()
+
+        # Yardım
+        elif "yardim" in komut:
+            self.mesaj_yaz("Asistan", "Sunlari diyebilirsiniz: 'kritik urunler', 'ekmek kac tane', 'stok listesi'.")
+
+        else:
+            self.mesaj_yaz("Asistan", "Bunu tam anlayamadim. 'yardim' yazarak komutlari gorebilirsiniz.")
+
+    def stoklari_listele(self):
+        liste = "\n".join([f"{u}: {m}" for u, m in self.urunler.items()])
+        messagebox.showinfo("Mevcut Stok", liste)
+
+    def urun_ekle_popup(self):
+        ad = simpledialog.askstring("Giris", "Urun Adi:")
+        if ad:
+            miktar = simpledialog.askinteger("Giris", f"{ad} icin miktar:")
+            if miktar is not None:
+                self.urunler[ad] = miktar
+                self.mesaj_yaz("Sistem", f"{ad} basariyla eklendi/guncellendi.")
+
+    def kaydet_verileri(self):
+        try:
+            with open(self.dosya_adi, mode='w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(['Urun', 'Miktar'])
+                for u, m in self.urunler.items():
+                    writer.writerow([u, m])
+            messagebox.showinfo("Basarili", "Veriler kaydedildi.")
+        except Exception as e:
+            messagebox.showerror("Hata", f"Kayit hatasi: {e}")
+
+if __name__ == "__main__":
+    app = StokYonetimSistemi()
+    app.root.mainloop()
