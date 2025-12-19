@@ -1,0 +1,133 @@
+import csv
+import tkinter as tk
+from tkinter import messagebox, simpledialog
+import os
+
+class StokYonetimSistemi:
+    def __init__(self, dosya_adi="stok_listesi.csv"):
+        self.dosya_adi = dosya_adi
+        self.tedarikci = {
+            "ad": "ABC Gıda Dağıtım A.Ş.",
+            "mail": "siparis@abcgida.com",
+            "tel": "+90 212 555 10 10"
+        }
+        
+        # 1. ADIM: Verileri dosyadan yükle (Eğer dosya yoksa varsayılanları kullan)
+        self.urunler = self.verileri_yukle()
+        
+        # Ana Pencere
+        self.root = tk.Tk()
+        self.root.title("Stok Takip Sistemi (Kalıcı Kayıt)")
+        self.root.geometry("350x320")
+        self.arayuz_hazirla()
+
+    def verileri_yukle(self):
+        """Program açıldığında CSV dosyasındaki verileri okur."""
+        varsayilan_urunler = {
+            "Çay": 15, "Su": 2, "Makarna": 20, "Ekmek": 3, "Süt": 12,
+            "Çikolata": 8, "Dondurma": 1, "Kola": 10, "Fanta": 4, "Pirinç": 25
+        }
+        
+        if os.path.exists(self.dosya_adi):
+            try:
+                yuklenen_urunler = {}
+                with open(self.dosya_adi, mode='r', encoding='utf-8-sig') as file:
+                    reader = csv.reader(file)
+                    next(reader) # Başlık satırını atla
+                    for satir in reader:
+                        if satir: # Boş satır kontrolü
+                            urun_adi, miktar = satir[0], int(satir[1])
+                            yuklenen_urunler[urun_adi] = miktar
+                print(">> [SİSTEM] Veriler dosyadan başarıyla yüklendi.")
+                return yuklenen_urunler
+            except Exception as e:
+                print(f">> [UYARI] Dosya okunurken hata oluştu, varsayılanlar yükleniyor: {e}")
+                return varsayilan_urunler
+        else:
+            print(">> [SİSTEM] Kayıt dosyası bulunamadı, varsayılan liste oluşturuldu.")
+            return varsayilan_urunler
+
+    def arayuz_hazirla(self):
+        tk.Label(self.root, text="📦 STOK KONTROL MERKEZİ", font=("Arial", 12, "bold")).pack(pady=15)
+        
+        tk.Button(self.root, text="📋 Stok Listesini Gör", command=self.stoklari_listele, width=28).pack(pady=5)
+        tk.Button(self.root, text="➕ Ürün Ekle / Güncelle", command=self.urun_ekle_popup, width=28, bg="#d4edda").pack(pady=5)
+        tk.Button(self.root, text="❌ Ürün Sil", command=self.urun_sil_popup, width=28, bg="#f8d7da").pack(pady=5)
+        tk.Button(self.root, text="💾 Kaydet ve Sipariş Oluştur", command=self.kaydet_ve_siparis_kontrol, width=28, bg="#cce5ff", font=("Arial", 9, "bold")).pack(pady=20)
+
+    def terminal_tablo_yazdir(self):
+        print("\n" + "="*40)
+        print(f"{'ÜRÜN ADI':<20} | {'STOK ADEDİ'}")
+        print("-" * 40)
+        for urun, miktar in self.urunler.items():
+            durum = " <-- KRİTİK" if miktar <= 5 else ""
+            print(f"{urun:<20} | {miktar:<10} {durum}")
+        print("="*40 + "\n")
+
+    def stoklari_listele(self):
+        liste_penceresi = tk.Toplevel(self.root)
+        liste_penceresi.title("Mevcut Stok")
+        liste_penceresi.geometry("300x380")
+        metin_alani = tk.Text(liste_penceresi, font=("Courier New", 10))
+        metin_alani.pack(padx=10, pady=10, fill="both", expand=True)
+        tablo_metni = f"{'ÜRÜN':<15} | {'STOK'}\n" + "-"*25 + "\n"
+        for u, m in self.urunler.items():
+            tablo_metni += f"{u:<15} | {m}\n"
+        metin_alani.insert("1.0", tablo_metni)
+        metin_alani.config(state="disabled")
+
+    def urun_ekle_popup(self):
+        ad = simpledialog.askstring("Ürün Girişi", "Ürün Adı:", parent=self.root)
+        if ad:
+            miktar = simpledialog.askinteger("Stok Girişi", f"{ad} için miktar:", parent=self.root)
+            if miktar is not None:
+                self.urunler[ad] = miktar
+                print(f">> [LOG] {ad} listeye eklendi/güncellendi.")
+
+    def urun_sil_popup(self):
+        ad = simpledialog.askstring("Ürün Sil", "Silinecek ürün adı:", parent=self.root)
+        if ad in self.urunler:
+            del self.urunler[ad]
+            print(f">> [LOG] {ad} silindi.")
+        elif ad:
+            messagebox.showerror("Hata", f"'{ad}' bulunamadı!")
+
+    def siparis_taslagi_goster(self, kritik_listesi):
+        taslak_penceresi = tk.Toplevel(self.root)
+        taslak_penceresi.title("Sipariş Formu")
+        taslak_penceresi.geometry("400x400")
+        taslak_metni = f"Kime: {self.tedarikci['mail']}\nKonu: Stok Siparişi\n\nÜrünler:\n"
+        for urun in kritik_listesi:
+            taslak_metni += f"- {urun}: ({self.urunler[urun]} adet kaldı)\n"
+        txt = tk.Text(taslak_penceresi, font=("Arial", 10), padx=10, pady=10)
+        txt.pack(fill="both", expand=True)
+        txt.insert("1.0", taslak_metni)
+        txt.config(state="disabled")
+
+    def kaydet_ve_siparis_kontrol(self):
+        try:
+            # 2. ADIM: Güncel sözlüğü CSV'ye yaz (Kalıcı kayıt burası)
+            with open(self.dosya_adi, mode='w', newline='', encoding='utf-8-sig') as file:
+                writer = csv.writer(file)
+                writer.writerow(['Ürün Adı', 'Stok Miktarı'])
+                for u, m in self.urunler.items():
+                    writer.writerow([u, m])
+            
+            self.terminal_tablo_yazdir()
+            kritikler = [u for u, m in self.urunler.items() if m <= 5]
+            
+            if kritikler:
+                if messagebox.askyesno("Kritik Durum", "Düşük stoklar var. Sipariş taslağı açılsun mu?"):
+                    self.siparis_taslagi_goster(kritikler)
+                else:
+                    self.root.destroy()
+            else:
+                messagebox.showinfo("Başarılı", "Tüm değişiklikler kaydedildi.")
+                self.root.destroy()
+
+        except Exception as e:
+            messagebox.showerror("Hata", f"Kaydedilemedi: {e}")
+
+if __name__ == "__main__":
+    app = StokYonetimSistemi()
+    app.root.mainloop()
